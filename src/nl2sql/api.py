@@ -94,7 +94,8 @@ class HealthResponse(BaseModel):
 
 
 # Mock LLM flag - set to True when LLM is not configured
-MOCK_MODE = True
+_maybe_key = os.getenv("OPENAI_API_KEY", "")
+MOCK_MODE = not _maybe_key or _maybe_key == "sk-your-openai-api-key-here"
 
 
 def _get_orchestrator():
