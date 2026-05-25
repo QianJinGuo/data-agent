@@ -14,3 +14,7 @@ class AgentState(TypedDict, total=False):
     chart_type: str
     final_answer: str
     error: Optional[str]
+    conversation_id: str
+    datasets: list
+    anomaly_result: Optional[dict]
+    detection_result: Optional[dict]

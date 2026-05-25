@@ -34,11 +34,15 @@ def build_graph(dataset: Dataset, llm=None, llm_provider: str = "openai", llm_mo
     def interpret_node(state):
         return nodes.interpret(state, llm, dataset)
 
+    def detect_anomaly_node(state):
+        return nodes.detect_anomaly(state)
+
     g.add_node("intent_classify", classify_node)
     g.add_node("sql_generate", generate_node)
     g.add_node("sql_execute", execute_node)
     g.add_node("attribution", attribute_node)
     g.add_node("interpret", interpret_node)
+    g.add_node("detect_anomaly", detect_anomaly_node)
 
     # Normal flow
     g.add_edge("intent_classify", "sql_generate")
@@ -52,7 +56,8 @@ def build_graph(dataset: Dataset, llm=None, llm_provider: str = "openai", llm_mo
 
     g.add_conditional_edges("sql_execute", route_after_execute)
     g.add_edge("attribution", "interpret")
-    g.add_edge("interpret", END)
+    g.add_edge("interpret", "detect_anomaly")
+    g.add_edge("detect_anomaly", END)
 
     g.set_entry_point("intent_classify")
     return g.compile()

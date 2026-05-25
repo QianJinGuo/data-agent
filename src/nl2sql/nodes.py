@@ -3,6 +3,8 @@ import json
 from langchain_core.messages import HumanMessage, AIMessage
 from nl2sql.schema import Dataset
 from nl2sql.chart_recommender import recommend_chart
+from nl2sql.multi_dataset import MultiDatasetManager
+from nl2sql import anomaly
 
 
 def intent_classify(state: dict, llm, dataset: Dataset) -> dict:
@@ -37,11 +39,43 @@ Return JSON only, no markdown."""
     return {"intent": parsed.get("intent", "query")}
 
 
-def sql_generate(state: dict, llm, dataset: Dataset) -> dict:
-    """Generate SQL from question + intent + semantic model."""
-    schema_text = dataset.get_schema_text()
+def sql_generate(state: dict, llm, dataset: Dataset, multi_dataset_manager: MultiDatasetManager = None) -> dict:
+    """Generate SQL from question + intent + semantic model.
+    
+    Supports multi-dataset queries by detecting if the question spans
+    multiple datasets and including schemas from all relevant datasets.
+    """
     intent = state.get("intent", "query")
     last_msg = state["messages"][-1].content if state["messages"] else ""
+
+    # Check if this is a cross-dataset query
+    multi_dataset_ids = []
+    if multi_dataset_manager and multi_dataset_manager.datasets:
+        multi_dataset_ids = multi_dataset_manager.cross_dataset_query(last_msg)
+
+    # Determine which schemas to include
+    if len(multi_dataset_ids) > 1:
+        # Cross-dataset query: merge all relevant schemas
+        schema_texts = []
+        for ds_id in multi_dataset_ids:
+            ds = multi_dataset_manager.get_dataset(ds_id)
+            if ds:
+                schema_texts.append(ds.get_schema_text())
+        schema_text = "\n\n---\n\n".join(schema_texts)
+        is_cross_dataset = True
+    elif multi_dataset_manager and multi_dataset_manager.datasets:
+        # Single dataset but from manager: check if question matches other datasets
+        single_ds_id = multi_dataset_manager.cross_dataset_query(last_msg)
+        if single_ds_id:
+            ds = multi_dataset_manager.get_dataset(single_ds_id[0])
+            schema_text = ds.get_schema_text() if ds else dataset.get_schema_text()
+        else:
+            schema_text = dataset.get_schema_text()
+        is_cross_dataset = False
+    else:
+        # Default single dataset
+        schema_text = dataset.get_schema_text()
+        is_cross_dataset = False
 
     examples = """Examples:
 Q: "What is the sales amount by region?"
@@ -53,8 +87,20 @@ SQL: SELECT sales.month AS month, COUNT(sales.order_id) AS order_count FROM sale
 Q: "Compare sales between North and South regions"
 SQL: SELECT sales.region AS region, SUM(sales.amount) AS total_sales FROM sales WHERE sales.region IN ('North', 'South') GROUP BY sales.region ORDER BY total_sales DESC
 """
+
+    cross_dataset_instruction = ""
+    if is_cross_dataset:
+        cross_dataset_instruction = """
+This is a CROSS-DATASET query involving multiple datasets.
+When generating SQL for cross-dataset queries:
+1. Use table aliases or fully-qualified table names (dataset_id.table_name)
+2. If JOIN is needed, use explicit JOIN syntax with appropriate keys
+3. Include all necessary tables from each dataset
+"""
+
     prompt = f"""Generate SQL for the user's question.
 Use the semantic model to map business terms to physical fields.
+{cross_dataset_instruction}
 
 Schema:
 {schema_text}
@@ -67,6 +113,7 @@ User question: {last_msg}
 Return a JSON object with:
 - "sql": the SQL query string
 - "explanation": brief explanation of the SQL
+- "datasets_used": list of dataset IDs used (for cross-dataset queries)
 
 Return JSON only, no markdown."""
     response = llm.invoke(prompt)
@@ -75,7 +122,13 @@ Return JSON only, no markdown."""
     except Exception:
         parsed = {"sql": "-- parse error", "explanation": "failed to parse LLM response"}
 
-    return {"sql": parsed.get("sql", "-- error")}
+    sql = parsed.get("sql", "-- error")
+    
+    # Store datasets used in state if cross-dataset
+    if is_cross_dataset and "datasets" not in state:
+        return {"sql": sql, "datasets": multi_dataset_ids}
+    
+    return {"sql": sql}
 
 
 def sql_execute(state: dict, dataset: Dataset) -> dict:
@@ -153,6 +206,20 @@ def attribution(state: dict) -> dict:
     return {"attribution_result": {"insight": "Not enough data for attribution analysis."}}
 
 
+def detect_anomaly(state: dict) -> dict:
+    """Run anomaly detection on query results.
+    
+    Reads query_result from state, calls anomaly.detect_anomaly(),
+    and stores the result back in state.
+    """
+    query_result = state.get("query_result")
+    if not query_result:
+        return {"anomaly_result": None}
+    
+    anomaly_result = anomaly.detect_anomaly(query_result)
+    return {"anomaly_result": anomaly_result}
+
+
 def interpret(state: dict, llm, dataset: Dataset) -> dict:
     """Generate natural language summary of results."""
     error = state.get("error")
@@ -180,7 +247,10 @@ def interpret(state: dict, llm, dataset: Dataset) -> dict:
         has_geography_dimension="region" in str(columns).lower(),
     )
 
-    # LLM-based interpretation
+    # Run anomaly detection if result exists
+    anomaly_result = anomaly.detect_anomaly(result) if result else None
+
+    # LLM-based interpretation with anomaly context
     prompt = f"""You are a data analyst. Summarize the following query results in plain Chinese.
 
 Intent: {intent}
@@ -189,10 +259,13 @@ Rows: {rows}
 
 Attribution analysis: {attr}
 
+Anomaly detection result: {anomaly_result}
+
 Provide a concise summary with:
 1. Key finding (1-2 sentences)
 2. Supporting numbers
 3. Business implication (1 sentence)
+4. If anomalies were detected, explain what they mean in the context of the data
 
 Return a JSON object with:
 - "summary": the natural language summary
@@ -205,9 +278,11 @@ Return JSON only."""
         return {
             "final_answer": parsed.get("summary", f"Query returned {len(rows)} rows with columns: {', '.join(columns)}"),
             "chart_type": chart,
+            "anomaly_result": anomaly_result,
         }
     except Exception:
         return {
             "final_answer": f"Query returned {len(rows)} rows. Top value: {rows[0] if rows else 'N/A'}",
             "chart_type": chart,
+            "anomaly_result": anomaly_result,
         }
