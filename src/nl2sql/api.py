@@ -4,6 +4,10 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from datetime import datetime
 import uuid
+import os
+
+from dotenv import load_dotenv
+load_dotenv()  # load .env file if present
 
 app = FastAPI(title="Data Agent API", version="0.1.0")
 
