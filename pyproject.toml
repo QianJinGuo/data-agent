@@ -1,0 +1,14 @@
+[project]
+name = "nl2sql"
+version = "0.1.0"
+description = "Data Agent NL2SQL MVP with LangGraph"
+requires-python = ">=3.11"
+dependencies = [
+    "langgraph>=0.4.0",
+    "langchain-core>=0.4.0",
+    "langchain-openai>=0.4.0",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio"]
