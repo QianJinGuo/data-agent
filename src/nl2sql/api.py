@@ -85,6 +85,12 @@ MOCK_MODE = True
 
 def _get_orchestrator():
     """Get or create orchestrator instance."""
+    import os
+
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if not api_key or api_key == "sk-not-set":
+        return None
+
     try:
         from nl2sql.orchestrator import DataAgentOrchestrator
         from nl2sql.cdp_client import MockCDPClient
