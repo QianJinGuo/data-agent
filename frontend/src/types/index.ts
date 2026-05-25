@@ -1,6 +1,7 @@
 export interface QueryRequest {
   question: string;
   conversation_id?: string;
+  dataset_ids?: string[];
 }
 
 export interface AttributionResult {
@@ -21,69 +22,62 @@ export interface ChartDataPoint {
 }
 
 export interface QueryResponse {
+  final_answer: string;
   sql: string;
-  answer: string;
-  data?: ChartDataPoint[];
-  columns?: string[];
-  chart_type?: string;
-  intent?: string;
-  attribution?: AttributionResult[];
-  anomaly?: AnomalyResult[];
-  conversation_id?: string;
-  MOCK_MODE?: boolean;
+  query_result?: { rows: ChartDataPoint[]; columns: string[] };
+  chart_type: string;
+  intent: string;
 }
 
 export interface CampaignRequest {
   objective: string;
   audience_description: string;
-  timing?: string;
+  timing?: Record<string, unknown>;
   channels?: string[];
 }
 
-export interface AudienceInsight {
-  label: string;
-  value: string | number;
-}
-
-export interface AudiencePreviewResponse {
+export interface AudienceResult {
+  id: string;
+  name: string;
+  rules: Record<string, unknown>[];
   estimated_count: number;
-  insights: AudienceInsight[];
-  rules: string[];
+  insights: string;
 }
 
 export interface Plan {
   id: string;
   name: string;
+  dimension: string;
   description: string;
-  estimated_reach: number;
-  budget: string;
-  recommended: boolean;
+  estimated_effect: string;
+  受众用户?: string;
 }
 
-export interface PlansResponse {
+export interface CampaignResponse {
+  campaign_id: string;
+  audience_result?: AudienceResult;
   proposed_plans: Plan[];
 }
 
 export interface StrategyResponse {
-  timing: string;
-  channels: string[];
-  content: string;
-  message: string;
+  strategy_id: string;
+  timing_design: { phase: string; timing: string; action: string }[];
+  content_variants: { variant: string; channel: string; template: string }[];
 }
 
 export interface Task {
   id: string;
-  type: string;
-  target: string;
-  status: string;
+  campaign_id: string;
+  audience_id: string;
+  trigger_condition: string;
   channel: string;
-  content: string;
-  scheduled_at?: string;
+  template_id: string;
+  status: string;
 }
 
 export interface TasksResponse {
   tasks: Task[];
-  message: string;
+  total: number;
 }
 
 export interface ConversationMessage {

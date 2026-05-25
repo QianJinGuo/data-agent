@@ -352,3 +352,27 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+def create_app(orchestrator=None) -> FastAPI:
+    """Factory to create FastAPI app with optional orchestrator injection.
+
+    Args:
+        orchestrator: DataAgentOrchestrator instance for real LLM-backed processing.
+
+    Returns:
+        Configured FastAPI application.
+    """
+    from nl2sql.orchestrator import DataAgentOrchestrator
+    from nl2sql.cdp_client import MockCDPClient
+
+    if orchestrator is None:
+        orchestrator = DataAgentOrchestrator(
+            cdp_client=MockCDPClient(),
+            llm_provider="openai",
+            llm_model="gpt-4o",
+        )
+
+    app.state.orchestrator = orchestrator  # type: ignore[attr-defined]
+
+    return app

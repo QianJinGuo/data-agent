@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import NL2SQLPage from './pages/NL2SQLPage';
 import MarketingPage from './pages/MarketingPage';
 import CampaignDetail from './pages/CampaignDetail';

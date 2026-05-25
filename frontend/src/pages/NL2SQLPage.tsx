@@ -11,7 +11,6 @@ function NL2SQLPage() {
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [selectedMessage, setSelectedMessage] = useState<ConversationMessage | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -34,7 +33,6 @@ function NL2SQLPage() {
   }, [messages]);
 
   const handleSend = async (question: string) => {
-    setError(null);
     setLoading(true);
 
     const newMessage: ConversationMessage = {
@@ -47,13 +45,7 @@ function NL2SQLPage() {
     setSelectedMessage(newMessage);
 
     try {
-      let conversationId: string | undefined;
-      const lastWithResponse = messages.filter((m) => m.response).pop();
-      if (lastWithResponse?.response?.conversation_id) {
-        conversationId = lastWithResponse.response.conversation_id;
-      }
-
-      const response: QueryResponse = await queryNL2SQL(question, conversationId);
+      const response: QueryResponse = await queryNL2SQL(question);
 
       setMessages((prev) =>
         prev.map((msg) =>
@@ -69,8 +61,10 @@ function NL2SQLPage() {
       );
     } catch (err) {
       const errorResponse: QueryResponse = {
+        final_answer: `Error: Failed to connect to server. Make sure the backend is running at http://localhost:8000`,
         sql: '',
-        answer: `Error: Failed to connect to server. Make sure the backend is running at http://localhost:8000`,
+        chart_type: 'table',
+        intent: 'error',
       };
       setMessages((prev) =>
         prev.map((msg) =>
@@ -79,7 +73,6 @@ function NL2SQLPage() {
             : msg
         )
       );
-      setError('Failed to fetch response');
       console.error(err);
     } finally {
       setLoading(false);
