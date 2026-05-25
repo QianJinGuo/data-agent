@@ -300,3 +300,152 @@ result = graph.invoke({
 | Conversation Memory | Thread-based history with LLM summarization |
 | Scheduled Tasks | Cron expression parsing + background scheduler |
 | Multi-dataset | Cross-dataset query detection + schema merging |
+
+---
+
+## Phase 3: Marketing Strategy Agent + Orchestrator
+
+### Architecture Overview
+
+```
+User Question
+     │
+     ▼
+┌────────────────────────────────────────────────────┐
+│           DataAgentOrchestrator                     │
+│  (route_question → nl2sql / marketing / other)     │
+└──────────┬─────────────────────────┬───────────────┘
+            │                        │
+   ┌────────▼──────────┐  ┌─────────▼──────────────┐
+   │   NL2SQL Graph    │  │   Marketing Graph      │
+   │ 6-node pipeline   │  │ 5-node pipeline        │
+   └───────────────────┘  └───────────────────────┘
+```
+
+### Marketing Strategy Agent
+
+Separate LangGraph pipeline for marketing campaign automation:
+
+```
+parse_objective → audience_build → plan_generate → strategy_generate → task_config → END
+```
+
+| Node | Input | Output | Description |
+|------|-------|--------|-------------|
+| `parse_objective` | messages | campaign_objective, audience_hints | Parse campaign description |
+| `audience_build` | audience_hints | target_audience, audience_insights | CDP integration for audience building |
+| `plan_generate` | target_audience | proposed_plans (N plans) | Generate segmentation plans |
+| `strategy_generate` | selected_plan | generated_strategy (timing/channel/content) | Generate outreach strategy |
+| `task_config` | strategy | outreach_tasks, final_answer | Configure outreach tasks |
+
+### DataAgentOrchestrator
+
+Single entry point for all Data Agent operations:
+
+```python
+from nl2sql.orchestrator import DataAgentOrchestrator
+
+orchestrator = DataAgentOrchestrator(
+    nl2sql_graph=nl2sql_g,
+    marketing_graph=marketing_g,
+    cdp_client=cdp,
+)
+
+# Auto-routing
+result = orchestrator.run("What are the sales by region?")
+# or
+result = orchestrator.run("I want to run a campaign for high-value customers")
+```
+
+Methods:
+- `route_question(question)` → classifies as nl2sql/marketing/other
+- `run_nl2sql(question, conversation_id, datasets)` → NL2SQL pipeline
+- `run_marketing(objective, audience_hints)` → Marketing pipeline
+- `run(question)` → auto-detect and execute
+
+### CDP Integration
+
+`CDPClient` abstract class with `MockCDPClient` for development:
+
+```python
+from nl2sql.cdp_client import CDPClient, MockCDPClient
+
+cdp = MockCDPClient()
+audience = cdp.build_audience({
+    "description": "high value customers",
+    "age_range": "25-40",
+    "spend_threshold": 1000,
+})
+# Returns: {id, name, rules, estimated_count, insights}
+```
+
+### REST API
+
+FastAPI-based API server:
+
+```bash
+# NL2SQL query
+curl -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Show sales by region"}'
+
+# Create marketing campaign
+curl -X POST http://localhost:8000/marketing/campaigns \
+  -H "Content-Type: application/json" \
+  -d '{"objective": "High-value reactivation", "audience_description": "..."}'
+
+# Apply marketing plan → strategy
+curl -X POST http://localhost:8000/marketing/plans/plan-1/apply \
+  -H "Content-Type: application/json" \
+  -d '{"channels": ["sms"], "content": {...}}'
+
+# Health check
+curl http://localhost:8000/health
+```
+
+Start server: `python examples/run_api.py`
+
+### Phase 3 Tech Stack Additions
+
+| Component | Technology |
+|-----------|------------|
+| Marketing Pipeline | LangGraph StateGraph (5 nodes) |
+| Orchestrator | LLM-based routing (nl2sql/marketing/other) |
+| CDP Integration | Abstract client + mock implementation |
+| REST API | FastAPI + Pydantic + uvicorn |
+| Marketing Data Models | Pydantic (AudienceSegment, MarketingPlan, Strategy, OutreachTask, MarketingCampaign) |
+
+## Project Structure (Phase 3)
+
+```
+data-agent/
+├── src/nl2sql/
+│   ├── __init__.py
+│   ├── schema.py           # Dataset, SemanticModel, Metric, Dimension
+│   ├── state.py            # AgentState TypedDict
+│   ├── nodes.py            # 6 NL2SQL graph nodes
+│   ├── graph.py            # build_graph() → NL2SQL StateGraph
+│   ├── chart_recommender.py
+│   ├── llm.py              # LLM wrapper (openai/anthropic/local)
+│   ├── anomaly.py          # z-score + IQR detection
+│   ├── conversation.py     # ConversationManager
+│   ├── multi_dataset.py    # MultiDatasetManager
+│   ├── scheduler.py        # ScheduledQuery + Scheduler
+│   ├── marketing_state.py  # MarketingAgentState TypedDict
+│   ├── marketing_schema.py # AudienceSegment, MarketingPlan, Strategy, OutreachTask, MarketingCampaign
+│   ├── marketing_nodes.py  # 5 marketing graph nodes
+│   ├── marketing_graph.py  # build_marketing_graph() → Marketing StateGraph
+│   ├── cdp_client.py       # CDPClient + MockCDPClient
+│   ├── orchestrator.py     # DataAgentOrchestrator
+│   └── api.py              # FastAPI REST API
+├── examples/
+│   ├── run_query.py        # NL2SQL CLI query
+│   ├── run_marketing.py    # Marketing campaign runner
+│   ├── run_orchestrator.py # Orchestrator auto-routing example
+│   └── run_api.py          # FastAPI server
+├── tests/
+│   ├── test_pipeline.py   # 8 NL2SQL tests
+│   └── test_marketing.py  # 5 marketing tests
+├── pyproject.toml
+└── README.md
+```
