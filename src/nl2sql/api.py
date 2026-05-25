@@ -1,6 +1,7 @@
 """FastAPI REST API for Data Agent."""
 from typing import Optional
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from datetime import datetime
 import uuid
@@ -10,6 +11,15 @@ from dotenv import load_dotenv
 load_dotenv()  # load .env file if present
 
 app = FastAPI(title="Data Agent API", version="0.1.0")
+
+# CORS: allow frontend dev server
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # In-memory storage for demo purposes
 _campaigns = {}
